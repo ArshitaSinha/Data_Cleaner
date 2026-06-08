@@ -55,7 +55,7 @@ Requires Python 3.10+.
 2. Review: Click Keep or Reject on the image cards. The borders will change color to indicate their status.
 3. Filter: Use the dropdown menu in the header to view only specific statuses.
 4. Export: Click the dark Export CSV button to download the finalized dataset metadata.
-# (Note: You can safely refresh the page or restart the server; your session is automatically saved to the SQLite database).
+#### (Note: You can safely refresh the page or restart the server; your session is automatically saved to the SQLite database).
 
 ---
 
