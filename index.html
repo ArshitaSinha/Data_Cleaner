@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dataset Cleaner Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8 font-sans">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8 bg-white p-6 rounded-lg shadow-sm flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Dataset Cleaner</h1>
+                <p class="text-gray-500 text-sm mt-1">Review, tag, and export your image data.</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="bg-gray-100 p-4 rounded-md border border-gray-200 flex flex-col justify-center">
+                    <form id="uploadForm" class="flex items-center gap-4">
+                        <input type="file" id="zipFile" accept=".zip" class="text-sm w-48">
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm transition">
+                            Upload Zip
+                        </button>
+                    </form>
+                    <p id="uploadStatus" class="text-xs text-green-600 mt-2 hidden"></p>
+                </div>
+
+                <div class="bg-purple-50 p-4 rounded-md border border-purple-200 flex flex-col justify-center w-72">
+                    <form id="scrapeForm" class="flex flex-col gap-2">
+                        <textarea id="scrapeText" rows="1" placeholder="Paste URLs or HTML code..." class="text-sm p-2 border border-purple-300 rounded resize-none"></textarea>
+                        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-medium text-sm transition">
+                            Extract Links
+                        </button>
+                    </form>
+                    <p id="scrapeStatus" class="text-xs text-purple-700 mt-2 hidden"></p>
+                </div>
+                
+                <div class="flex flex-col gap-2 h-full justify-between">
+                    <div class="bg-gray-100 p-1.5 rounded-md border border-gray-200">
+                        <select id="statusFilter" class="text-sm w-full p-2 rounded border-gray-300 bg-white outline-none cursor-pointer">
+                            <option value="all">Show All Images</option>
+                            <option value="needs_review">Needs Review</option>
+                            <option value="keep">Kept</option>
+                            <option value="reject">Rejected</option>
+                        </select>
+                    </div>
+                    <button id="exportBtn" class="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-md font-medium text-sm transition shadow-sm w-full">
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div id="gallery" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+
+        // 1. Function to handle Keep/Reject button clicks
+        async function updateStatus(imageId, newStatus) {
+            try {
+                await fetch(`${API_URL}/images/${imageId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                loadImages(); // Reload to show the updated status
+            } catch (error) {
+                console.error("Error updating status:", error);
+            }
+        }
+
+        // 2. Fetch and Display Images (WITH FILTERING)
+        async function loadImages() {
+            const response = await fetch(`${API_URL}/images`);
+            const allImages = await response.json();
+            const gallery = document.getElementById('gallery');
+            const filterValue = document.getElementById('statusFilter').value;
+            
+            gallery.innerHTML = ''; 
+
+            // Filter the images based on the dropdown
+            const imagesToShow = allImages.filter(img => {
+                if (filterValue === 'all') return true;
+                return img.status === filterValue;
+            });
+
+            imagesToShow.forEach(img => {
+                const card = document.createElement('div');
+                
+                // Visual feedback based on status
+                let borderClass = "border-gray-200";
+                let statusBadge = "";
+                
+                if (img.status === 'keep') {
+                    borderClass = "border-green-500 shadow-green-100 ring-2 ring-green-500";
+                    statusBadge = `<span class="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded shadow">Kept</span>`;
+                } else if (img.status === 'reject') {
+                    borderClass = "border-red-500 opacity-60";
+                    statusBadge = `<span class="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded shadow">Rejected</span>`;
+                }
+
+                card.className = `bg-white rounded-lg shadow-sm border transition relative ${borderClass} overflow-hidden`;
+                
+                card.innerHTML = `
+                    ${statusBadge}
+                    <div class="h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                        <img src="${API_URL}/uploads/${encodeURIComponent(img.filename)}" alt="${img.filename}" class="object-cover h-full w-full">
+                    </div>
+                    <div class="p-4">
+                        <p class="text-sm font-medium text-gray-800 truncate" title="${img.filename}">${img.filename}</p>
+                        <p class="text-xs text-gray-500 mb-3">${img.size_kb.toFixed(1)} KB • ${img.file_type.toUpperCase()}</p>
+                        
+                        <div class="flex gap-2">
+                            <button onclick="updateStatus(${img.id}, 'keep')" class="flex-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 rounded text-xs font-bold border border-green-300 transition">Keep</button>
+                            <button onclick="updateStatus(${img.id}, 'reject')" class="flex-1 bg-red-100 hover:bg-red-200 text-red-700 py-1 rounded text-xs font-bold border border-red-300 transition">Reject</button>
+                        </div>
+                    </div>
+                `;
+                gallery.appendChild(card);
+            });
+        }
+
+        // 3. Handle Zip Upload
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('zipFile');
+            const statusText = document.getElementById('uploadStatus');
+            
+            if (fileInput.files.length === 0) return alert("Please select a zip file first.");
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            statusText.textContent = "Uploading and extracting...";
+            statusText.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`${API_URL}/upload/zip`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                statusText.textContent = `Success: Extracted ${result.extracted_new_images}, Ignored ${result.duplicates_ignored} duplicates.`;
+                
+                loadImages();
+                fileInput.value = ""; 
+            } catch (error) {
+                statusText.textContent = "Error uploading file.";
+                statusText.className = "text-xs text-red-600 mt-2";
+            }
+        });
+
+        // 4. Handle URL/HTML Scraping
+        document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const textInput = document.getElementById('scrapeText');
+            const statusText = document.getElementById('scrapeStatus');
+            
+            if (!textInput.value.trim()) return alert("Please paste some text or URLs first.");
+
+            statusText.textContent = "Scanning and downloading...";
+            statusText.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`${API_URL}/scrape`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: textInput.value })
+                });
+                
+                const result = await response.json();
+                statusText.textContent = `Found ${result.total_found_urls} links. Saved ${result.extracted_new_images} new, ignored ${result.duplicates_ignored} dupes.`;
+                
+                loadImages();
+                textInput.value = ""; 
+            } catch (error) {
+                statusText.textContent = "Error extracting URLs.";
+                statusText.className = "text-xs text-red-600 mt-2";
+            }
+        });
+
+        // 5. Handle CSV Export
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            window.location.href = `${API_URL}/export`;
+        });
+
+        // 6. Handle Dropdown Filter Change
+        document.getElementById('statusFilter').addEventListener('change', loadImages);
+
+        // Load images on page start
+        loadImages();
+    </script>
+</body>
+</html>

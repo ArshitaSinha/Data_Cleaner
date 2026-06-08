@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # This keeps your database and images saved on your computer even if Docker restarts
+      - ./uploads:/app/uploads
+      - ./review_session.db:/app/review_session.db
